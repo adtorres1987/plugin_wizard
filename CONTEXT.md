@@ -217,7 +217,7 @@ STATUS_DO_NOT_INCLUDE = "Do not include"
 
 ## UI Layout (`plugin_wizard_dialog_base.ui`)
 
-**Root:** `QWizard` (1000×700, ModernStyle, title "Assessment Wizard")
+**Root:** `QWizard` (1000×700, ModernStyle, title "Plugin Wizard")
 
 ### Page 1 — Initial Configuration
 | Widget | Type | Purpose |

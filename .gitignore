@@ -1,3 +1,8 @@
 .vscode
 __pycache__
 CLAUDE.md
+CONTEXT.md
+*.sqlite
+*.db
+/data
+db_design.md

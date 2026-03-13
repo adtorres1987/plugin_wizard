@@ -1,4 +1,4 @@
-# Assessment Wizard
+# Plugin Wizard
 
 A QGIS plugin that provides a wizard-based interface for creating and configuring spatial assessments.
 
@@ -8,7 +8,7 @@ A QGIS plugin that provides a wizard-based interface for creating and configurin
 
 1. Open QGIS
 2. Go to `Plugins` → `Manage and Install Plugins`
-3. Search for "Assessment Wizard"
+3. Search for "Plugin Wizard"
 4. Click `Install Plugin`
 
 ### Option 2: Manual Installation
@@ -21,7 +21,7 @@ A QGIS plugin that provides a wizard-based interface for creating and configurin
 4. Restart QGIS
 5. Enable the plugin:
    - Go to `Plugins` → `Manage and Install Plugins`
-   - Find "Assessment Wizard" in the list
+   - Find "Plugin Wizard" in the list
    - Check the box to enable it
 
 ## License

@@ -23,6 +23,7 @@
 """
 
 import os
+import re
 
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
@@ -34,7 +35,7 @@ from qgis.gui import QgsMapCanvas, QgsMapTool, QgsMapToolPan, QgsRubberBand
 from PyQt5.QtGui import QColor
 
 # Import database manager and spatial analysis
-from .database_manager import DatabaseManager, PSYCOPG2_AVAILABLE
+from .database_manager import DatabaseManager
 from .spatial_analysis import SpatialAnalyzer
 
 
@@ -69,17 +70,6 @@ class FeatureSelectionTool(QgsMapTool):
         Returns:
             QgsVectorLayer - New memory layer with selected features
         """
-        from qgis.core import QgsWkbTypes
-
-        # Commented out - Old code not needed for memory layer creation
-        # request = QgsFeatureRequest().setFilterFid(feature_ids)
-        # safe_options = QgsVectorFileWriter.SaveVectorOptions()
-        # safe_options.driverName = "SQLite"
-        # safe_options.layerName = table_name
-        # safe_options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteLayer
-        # safe_options.fileEncoding = "UTF-8"
-        # safe_options.datasourceOptions = ["SPATIALITE=YES"]
-        
         # Get layer properties
         geometry_type = source_layer.geometryType()
         crs = source_layer.crs().authid()
@@ -385,23 +375,35 @@ class QpluginWizardDialog(QtWidgets.QWizard, FORM_CLASS):
     STATUS_SPATIAL_MARKER = "Spatial Marker"
     STATUS_DO_NOT_INCLUDE = "Do not include"
 
-    def __init__(self, parent=None, iface=None):
-        """Constructor."""
+    def __init__(self, parent=None, iface=None,
+                 project_id=None, project_name=None, project_db=None):
+        """Constructor.
+
+        Args:
+            iface: QgsInterface instance
+            project_id: int — id of the active project in project.sqlite
+            project_name: str — display name of the active project
+            project_db: ProjectDatabase instance (shared, already connected)
+        """
         super(QpluginWizardDialog, self).__init__(parent)
-        # Set up the user interface from Designer through FORM_CLASS.
-        # After self.setupUi() you can access any designer object by doing
-        # self.<objectname>, and you can use autoconnect slots - see
-        # http://qt-project.org/doc/qt-4.8/designer-using-a-ui-file.html
-        # #widgets-and-dialogs-with-auto-connect
         self.setupUi(self)
 
         # Initialize variables
         self.iface = iface
+        self.project_id = project_id
+        self.project_name = project_name
+        self.project_db = project_db      # ProjectDatabase (metadata)
         self.target_layer = None
         self.selected_features_layer = None
         self.map_canvas = None
         self.map_canvas_page3 = None
         self.map_tool_select = None
+        # SpatiaLite database: one file per project, stored in plugin_dir/data/
+        plugin_dir = os.path.dirname(__file__)
+        data_dir = os.path.join(plugin_dir, 'data')
+        os.makedirs(data_dir, exist_ok=True)
+        safe_name = re.sub(r'[^\w\-]', '_', project_name or 'project').strip('_') or 'project'
+        self.db_path = os.path.join(data_dir, f'{safe_name}.db')
 
         # Initialize wizard pages
         self.initialize_page_1()
@@ -415,158 +417,179 @@ class QpluginWizardDialog(QtWidgets.QWizard, FORM_CLASS):
 
     def accept(self):
         """Override accept to perform spatial analysis when wizard finishes."""
-        # Get assessment name from page 1 (replace spaces with underscores)
+        # Get assessment name from page 1 (spaces → underscores)
         assessment_name = self.lineEdit_name.text().strip().replace(' ', '_')
+        assessment_description = self.textEdit_description.toPlainText().strip() or None
 
-        # Get target and assessment layers
+        # Collect layers by role
         target_layer = None
         assessment_layers = []
-
+        spatial_markers = []
         for row in range(self.tableWidget_layers.rowCount()):
             layer_name_item = self.tableWidget_layers.item(row, 0)
             status_combo = self.tableWidget_layers.cellWidget(row, 2)
-
             if layer_name_item and status_combo:
                 layer_name = layer_name_item.text()
                 status = status_combo.currentText()
-
                 layers = QgsProject.instance().mapLayersByName(layer_name)
                 if layers and isinstance(layers[0], QgsVectorLayer):
                     if status == self.STATUS_TARGET:
                         target_layer = layers[0]
                     elif status == self.STATUS_INCLUDE:
                         assessment_layers.append(layers[0])
+                    elif status == self.STATUS_SPATIAL_MARKER:
+                        spatial_markers.append(layers[0])
 
-        # Check if we have a target layer
         if not target_layer:
-            QMessageBox.warning(
-                self,
-                "Analysis Error",
-                "No target layer selected. Please select a layer as 'Include as Target'."
-            )
+            QMessageBox.warning(self, "Analysis Error",
+                "No target layer selected. Please select a layer as 'Include as Target'.")
             return
 
+        analysis_id = None
+        progress = QProgressDialog("Operation and analysis in progress...", None, 0, 0, self)
+        progress.setWindowTitle("Processing")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.show()
+        QCoreApplication.processEvents()
+
         try:
-            # Show progress dialog
-            progress = QProgressDialog(
-                "Operation and analysis in progress...",
-                None,  # No cancel button
-                0, 0,  # Indeterminate progress
-                self
-            )
-            progress.setWindowTitle("Processing")
-            progress.setWindowModality(Qt.WindowModal)
-            progress.setMinimumDuration(0)
-            progress.show()
-            QCoreApplication.processEvents()
+            # ------------------------------------------------------------------
+            # 1. Register assessment + analysis in project_db → get version_number
+            # ------------------------------------------------------------------
+            version = 1
+            if self.project_db and self.project_id:
+                # Find or create assessment
+                existing = [a for a in self.project_db.list_assessments(
+                                self.project_id, active_only=False)
+                            if a['name'] == assessment_name]
+                if existing:
+                    assessment_id = existing[0]['id']
+                else:
+                    assessment_id = self.project_db.create_assessment(
+                        self.project_id,
+                        assessment_name,
+                        description=assessment_description,
+                        target_layer_name=target_layer.name(),
+                        target_layer_source=target_layer.source(),
+                        model_type='overlay'
+                    )
+                    # Target layer
+                    self.project_db.add_assessment_layer(
+                        assessment_id,
+                        layer_name=target_layer.name(),
+                        layer_role='target',
+                        layer_source=target_layer.source(),
+                        geometry_type=QgsWkbTypes.displayString(target_layer.wkbType())
+                    )
+                    # Criterion layers
+                    for lyr in assessment_layers:
+                        self.project_db.add_assessment_layer(
+                            assessment_id,
+                            layer_name=lyr.name(),
+                            layer_role='criterion',
+                            layer_source=lyr.source(),
+                            geometry_type=QgsWkbTypes.displayString(lyr.wkbType())
+                        )
+                    # Spatial marker layers
+                    for lyr in spatial_markers:
+                        self.project_db.add_assessment_layer(
+                            assessment_id,
+                            layer_name=lyr.name(),
+                            layer_role='spatial_marker',
+                            layer_source=lyr.source(),
+                            geometry_type=QgsWkbTypes.displayString(lyr.wkbType())
+                        )
 
-            # Case 1: Only target layer selected - create layer with selected features only
+                # Create analysis record — version_number is auto-assigned
+                analysis_id = self.project_db.create_analysis(
+                    assessment_id,
+                    name=f"{assessment_name}_analysis",
+                    analysis_type='overlay',
+                    description=assessment_description
+                )
+                version = self.project_db.get_analysis(analysis_id)['version_number']
+
+            output_name = f"{assessment_name}_analysis_{version}"
+
+            # ------------------------------------------------------------------
+            # 2. Run spatial analysis / create output layer
+            # ------------------------------------------------------------------
             if not assessment_layers:
-                # Get selected features from target layer
+                # Case 1: Target only — create memory layer with selected features
                 selected_features = list(target_layer.selectedFeatures())
-
                 if not selected_features:
                     progress.close()
-                    QMessageBox.warning(
-                        self,
-                        "No Features Selected",
-                        "No features are selected in the target layer. Please select features in Page 2."
-                    )
+                    if analysis_id and self.project_db:
+                        self.project_db.update_analysis_status(analysis_id, 'failed')
+                    QMessageBox.warning(self, "No Features Selected",
+                        "No features are selected in the target layer. "
+                        "Please select features in Page 2.")
                     return
 
-                # Create memory layer with selected features
                 geom_type = QgsWkbTypes.displayString(target_layer.wkbType())
                 crs = target_layer.crs().authid()
-
-                # Layer name with "_simple_case" suffix
-                layer_name = f"{assessment_name}_simple_case"
-
-                # Create new memory layer with same structure
-                memory_layer = QgsVectorLayer(
-                    f"{geom_type}?crs={crs}",
-                    layer_name,
-                    "memory"
-                )
-
-                # Copy fields from source layer
+                memory_layer = QgsVectorLayer(f"{geom_type}?crs={crs}", output_name, "memory")
                 memory_layer.dataProvider().addAttributes(target_layer.fields().toList())
                 memory_layer.updateFields()
-
-                # Add selected features
                 memory_layer.dataProvider().addFeatures(selected_features)
                 memory_layer.updateExtents()
-
-                # Add layer to project
                 QgsProject.instance().addMapLayer(memory_layer)
 
-                # Close progress dialog
+                storage_type = 'memory'
+                feature_count = len(selected_features)
                 progress.close()
-
-                QMessageBox.information(
-                    self,
-                    "Layer Created",
-                    f"Layer '{layer_name}' created successfully!\n\n"
-                    f"Features: {len(selected_features)}"
-                )
+                QMessageBox.information(self, "Layer Created",
+                    f"Layer '{output_name}' created successfully!\n\n"
+                    f"Features: {feature_count}")
             else:
-                # Case 2: Target and assessment layers - perform both intersection and union using PostgreSQL
-                # Initialize database manager
-                db_manager = DatabaseManager(
-                    host="localhost",
-                    database="wizard_db",
-                    user="postgres",
-                    password="user123",
-                    port="5432"
-                )
+                # Case 2: Cumulative overlay via SpatiaLite
+                db_manager = DatabaseManager(db_path=self.db_path)
                 db_manager.connect()
-
                 analyzer = SpatialAnalyzer(db_manager)
 
                 target_table = db_manager.sanitize_table_name(target_layer.name())
                 assessment_tables = [
                     db_manager.sanitize_table_name(l.name()) for l in assessment_layers
                 ]
-                output_table = db_manager.sanitize_table_name(f"{assessment_name}_overlay")
+                output_table = db_manager.sanitize_table_name(output_name)
 
                 result = analyzer.cumulative_overlay(
-                    target_table,
-                    assessment_tables,
-                    output_table,
-                    layer_name=f"{assessment_name}_overlay"
+                    target_table, assessment_tables, output_table,
+                    layer_name=output_name
                 )
-                results = [result]
-
-                # Disconnect from database
                 db_manager.disconnect()
 
-                # Close progress dialog
+                storage_type = 'spatialite'
+                feature_count = result['total_count']
                 progress.close()
+                QMessageBox.information(self, "Analysis Complete",
+                    f"Spatial analysis completed successfully!\n\n"
+                    f"Layer: {output_name}\nFeatures: {feature_count}")
 
-                # Show success message
-                if results:
-                    total_features = sum(r['total_count'] for r in results)
-                    layer_names = "\n• ".join(r['layer'].name() for r in results)
+            # ------------------------------------------------------------------
+            # 3. Persist result and mark analysis as completed
+            # ------------------------------------------------------------------
+            if analysis_id and self.project_db:
+                self.project_db.update_analysis_status(analysis_id, 'completed')
+                self.project_db.add_analysis_result(
+                    analysis_id,
+                    result_type='vector_layer',
+                    name=output_name,
+                    storage_type=storage_type,
+                    storage_ref=output_name,
+                    is_primary=True
+                )
 
-                    QMessageBox.information(
-                        self,
-                        "Analysis Complete",
-                        f"Spatial analysis completed successfully!\n\n"
-                        f"Created layer(s):\n• {layer_names}\n\n"
-                        f"Total features: {total_features}"
-                    )
-
-            # Clean up and close wizard
             self.cleanup_wizard_data()
             super(QpluginWizardDialog, self).accept()
 
         except Exception as e:
-            # Close progress dialog on error
             progress.close()
-            QMessageBox.critical(
-                self,
-                "Analysis Error",
-                f"Spatial analysis failed:\n{str(e)}"
-            )
+            if analysis_id and self.project_db:
+                self.project_db.update_analysis_status(analysis_id, 'failed')
+            QMessageBox.critical(self, "Analysis Error",
+                f"Spatial analysis failed:\n{str(e)}")
 
     def cleanup_wizard_data(self):
         """Clean up all data when wizard is cancelled or finished."""
@@ -665,35 +688,18 @@ class QpluginWizardDialog(QtWidgets.QWizard, FORM_CLASS):
                 if combo and combo != sender and combo.currentText() == self.STATUS_TARGET:
                     combo.setCurrentText(self.STATUS_DO_NOT_INCLUDE)
 
-    def migrate_selected_layers_to_postgres(self):
-        """Migrate all selected layers (not 'Do not include') to PostgreSQL using DatabaseManager."""
-        if not PSYCOPG2_AVAILABLE:
-            QMessageBox.warning(
-                self,
-                "Database Error",
-                "psycopg2 library is not available. Please install it to use PostgreSQL migration.\n\n"
-                "Install with: pip install psycopg2-binary"
-            )
-            return False
-
+    def migrate_selected_layers(self):
+        """Migrate all selected layers (not 'Do not include') to the SpatiaLite database."""
         try:
-            # Initialize database manager
-            db_manager = DatabaseManager(
-                host="localhost",
-                database="wizard_db",
-                user="postgres",
-                password="user123",
-                port="5432"
-            )
+            db_manager = DatabaseManager(db_path=self.db_path)
 
-            # Connect to database
             try:
                 db_manager.connect()
             except Exception as e:
                 QMessageBox.critical(
                     self,
                     "Database Connection Error",
-                    f"Failed to connect to PostgreSQL database 'wizard_db':\n{str(e)}"
+                    f"Failed to open SpatiaLite database:\n{str(e)}"
                 )
                 return False
 
@@ -760,7 +766,7 @@ class QpluginWizardDialog(QtWidgets.QWizard, FORM_CLASS):
                         return True
 
             # Create progress dialog
-            progress = QProgressDialog("Migrating layers to PostgreSQL...", "Cancel", 0, len(layers_dict), self)
+            progress = QProgressDialog("Migrating layers to SpatiaLite...", "Cancel", 0, len(layers_dict), self)
             progress.setWindowTitle("Database Migration")
             progress.setWindowModality(Qt.WindowModal)
             progress.setMinimumDuration(0)
@@ -802,7 +808,7 @@ class QpluginWizardDialog(QtWidgets.QWizard, FORM_CLASS):
                     f"Some layers failed to migrate:\n\n" + "\n".join(failed_layers)
                 )
             else:
-                summary = f"Successfully migrated {len(layers_dict)} layer(s) to database 'wizard_db':\n\n"
+                summary = f"Successfully migrated {len(layers_dict)} layer(s) to SpatiaLite database:\n\n"
                 summary += f"Total inserted: {total_stats['inserted']}\n"
                 summary += f"Total updated: {total_stats['updated']}\n"
                 summary += f"Total unchanged: {total_stats['unchanged']}\n"
@@ -920,8 +926,8 @@ class QpluginWizardDialog(QtWidgets.QWizard, FORM_CLASS):
                         )
                         return False
 
-        # Migrate selected layers to PostgreSQL
-        if not self.migrate_selected_layers_to_postgres():
+        # Migrate selected layers to SpatiaLite
+        if not self.migrate_selected_layers():
             # Migration failed, but allow user to continue
             # (they already saw the error message)
             pass
@@ -1499,8 +1505,6 @@ class QpluginWizardDialog(QtWidgets.QWizard, FORM_CLASS):
         self.label_summary_name.setText(assessment_name)
         self.label_summary_description.setText(assessment_description if assessment_description else "No description provided")
 
-        # Detect assessment complexity and display information
-        # complexity = self.detect_assessment_complexity()
         assessment_summary = self.get_assessment_summary()
 
         # Display complexity summary in the dedicated label
