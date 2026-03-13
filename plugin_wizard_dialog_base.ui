@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>QpluginWizardDialogBase</class>
+ <widget class="QWizard" name="QpluginWizardDialogBase">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1000</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Assessment Wizard</string>
+  </property>
+  <property name="wizardStyle">
+   <enum>QWizard::ModernStyle</enum>
+  </property>
+  <widget class="QWizardPage" name="page_1">
+   <property name="title">
+    <string>Page 1 - Initial Configuration</string>
+   </property>
+   <property name="subTitle">
+    <string>Configure the initial parameters for the assessment</string>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_page1">
+    <item>
+     <layout class="QFormLayout" name="formLayout_page1">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_name">
+        <property name="text">
+         <string>Name:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="lineEdit_name">
+        <property name="placeholderText">
+         <string>Enter name</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_description">
+        <property name="text">
+         <string>Description:</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QTextEdit" name="textEdit_description">
+        <property name="placeholderText">
+         <string>Enter description</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QLabel" name="label_layers">
+      <property name="text">
+       <string>Configure layer status for the assessment:</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QTableWidget" name="tableWidget_layers">
+      <property name="toolTip">
+       <string>Set the status for each layer. One layer must be set as "Include as Target"</string>
+      </property>
+      <property name="editTriggers">
+       <set>QAbstractItemView::NoEditTriggers</set>
+      </property>
+      <property name="selectionBehavior">
+       <enum>QAbstractItemView::SelectRows</enum>
+      </property>
+      <column>
+       <property name="text">
+        <string>Layer Name</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Geometry Type</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Status</string>
+       </property>
+      </column>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWizardPage" name="page_2">
+   <property name="title">
+    <string>Page 2 - Feature Selection</string>
+   </property>
+   <property name="subTitle">
+    <string>Select features from the target layer</string>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_page2">
+    <item>
+     <widget class="QLabel" name="label_target_layer_name">
+      <property name="text">
+       <string>Target Layer: </string>
+      </property>
+      <property name="styleSheet">
+       <string>QLabel { font-weight: bold; }</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_buttons">
+      <item>
+       <widget class="QPushButton" name="pushButton_select_all">
+        <property name="text">
+         <string>Select All Features</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_clear_selection">
+        <property name="text">
+         <string>Clear Selection</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_buttons">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_selection_count">
+        <property name="text">
+         <string>Selected: 0 features</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QWidget" name="map_canvas_container" native="true">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>400</height>
+       </size>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_map">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+      </layout>
+     </widget>
+    </item>
+    <!-- <item>
+     <widget class="QLabel" name="label_page2_instructions">
+      <property name="text">
+       <string>Click on features in the map to select them, or use the buttons above. At least one feature must be selected to proceed.</string>
+      </property>
+      <property name="wordWrap">
+       <bool>true</bool>
+      </property>
+      <property name="styleSheet">
+       <string>QLabel { color: gray; font-size: 9pt; }</string>
+      </property>
+     </widget>
+    </item> -->
+   </layout>
+  </widget>
+  <widget class="QWizardPage" name="page_3">
+   <property name="title">
+    <string>Page 3 - Summary</string>
+   </property>
+   <property name="subTitle">
+    <string>Review your assessment configuration</string>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_page3">
+    <item>
+     <widget class="QLabel" name="label_summary_header">
+      <property name="text">
+       <string>&lt;h3&gt;Assessment Summary&lt;/h3&gt;</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="groupBox_basic_info">
+      <property name="title">
+       <string>Basic Information</string>
+      </property>
+      <layout class="QFormLayout" name="formLayout_summary">
+       <item row="0" column="0">
+        <widget class="QLabel" name="label_summary_name_label">
+         <property name="text">
+          <string>Assessment Name:</string>
+         </property>
+         <property name="styleSheet">
+          <string>font-weight: bold;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLabel" name="label_summary_name">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="label_summary_description_label">
+         <property name="text">
+          <string>Description:</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+         </property>
+         <property name="styleSheet">
+          <string>font-weight: bold;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLabel" name="label_summary_description">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="label_summary_features_label">
+         <property name="text">
+          <string>Selected Features:</string>
+         </property>
+         <property name="styleSheet">
+          <string>font-weight: bold;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLabel" name="label_summary_features">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="label_complexity_label">
+         <property name="text">
+          <string>Assessment Complexity:</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+         </property>
+         <property name="styleSheet">
+          <string>font-weight: bold;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QLabel" name="label_complexity_summary">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="groupBox_layers">
+      <property name="title">
+       <string>Included Layers</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_layers_summary">
+       <item>
+        <widget class="QTableWidget" name="tableWidget_summary_layers">
+         <property name="editTriggers">
+          <set>QAbstractItemView::NoEditTriggers</set>
+         </property>
+         <property name="selectionMode">
+          <enum>QAbstractItemView::NoSelection</enum>
+         </property>
+         <column>
+          <property name="text">
+           <string>Layer Name</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Geometry Type</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Status</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="groupBox_selected_features_map">
+      <property name="title">
+       <string>Selected Features Map</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_selected_map">
+       <item>
+        <widget class="QWidget" name="widget_map_container_page3" native="true">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>400</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <spacer name="verticalSpacer_page3">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>20</width>
+        <height>40</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
